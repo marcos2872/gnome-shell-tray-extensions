@@ -1,0 +1,7 @@
+# Pacotes gerados pelo gnome-extensions pack
+*.shell-extension.zip
+# Schemas compilados (gerados por glib-compile-schemas)
+**/schemas/gschemas.compiled
+# Logs do modo dev
+/tmp/
+*.log
