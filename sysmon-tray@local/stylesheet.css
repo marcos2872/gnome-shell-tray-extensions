@@ -11,12 +11,39 @@
   padding: 0 2px;
 }
 
-/* Slot estilo Stats/Mini: sem gráfico = label + valor lado a lado;
-   com gráfico = label acima do sparkline */
+/* Slot vertical compacto:
+     C |      C |
+     P | 100%   P | gráfico
+     U |      U |
+   Letras sempre visíveis; valor ou sparkline na linha do meio */
 .sysmon-slot {
   spacing: 0;
   padding: 0 2px;
   min-width: 68px;
+}
+
+.sysmon-slot-v {
+  spacing: 3px;
+  padding: 0 3px;
+  min-width: 0;
+}
+
+.sysmon-v-letters {
+  spacing: 0;
+}
+
+.sysmon-v-letter {
+  font-family: Cantarell;
+  font-size: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+  opacity: 0.65;
+  text-align: center;
+  height: 9px;
+}
+
+.sysmon-v-content {
+  spacing: 0;
 }
 
 .sysmon-num-row {
@@ -45,11 +72,14 @@
   font-size: 12px;
   font-weight: 400;
   font-variant-numeric: tabular-nums;
-  text-align: center;
+  text-align: left;
+  padding-left: 1px;
 }
 
 .sysmon-mini {
-  margin-top: 1px;
+  margin-top: 0;
+  margin-left: 1px;
+  background-color: transparent;
 }
 
 .sysmon-tray-label {

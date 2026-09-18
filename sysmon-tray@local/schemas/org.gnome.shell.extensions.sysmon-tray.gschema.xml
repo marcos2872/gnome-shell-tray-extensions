@@ -45,15 +45,15 @@
       <summary>Exibir bateria</summary>
     </key>
     <key name="graph-cpu" type="b">
-      <default>false</default>
+      <default>true</default>
       <summary>Exibir gráfico da CPU</summary>
     </key>
     <key name="graph-gpu" type="b">
-      <default>false</default>
+      <default>true</default>
       <summary>Exibir gráfico da GPU</summary>
     </key>
     <key name="graph-ram" type="b">
-      <default>false</default>
+      <default>true</default>
       <summary>Exibir gráfico da RAM</summary>
     </key>
     <key name="graph-net" type="b">

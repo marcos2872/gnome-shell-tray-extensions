@@ -15,6 +15,17 @@ fi
 
 rm -f "$LOG"
 
+# Sincroniza fontes (inclui cards.js/collectors.js/history.js que o
+# `gnome-extensions pack` não leva por padrão sem --extra-source)
+SRC="$(cd "$(dirname "$0")" && pwd)"
+DEST="$HOME/.local/share/gnome-shell/extensions/$UUID"
+mkdir -p "$DEST"
+cp "$SRC/extension.js" "$SRC/cards.js" "$SRC/collectors.js" "$SRC/history.js" \
+   "$SRC/prefs.js" "$SRC/metadata.json" "$SRC/stylesheet.css" "$DEST/"
+[ -d "$SRC/schemas" ] && cp -r "$SRC/schemas" "$DEST/" 2>/dev/null || true
+glib-compile-schemas "$DEST/schemas/" 2>/dev/null || true
+echo "Sincronizado: $SRC -> $DEST"
+
 dbus-run-session -- bash -c '
   /usr/bin/gnome-shell --devkit --wayland > "'"$LOG"'" 2>&1 &
   SHPID=$!

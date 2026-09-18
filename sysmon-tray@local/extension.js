@@ -165,15 +165,18 @@ export default class SysMonTrayExtension extends Extension {
     }
   }
 
-  // Toggle Gráfico: ON = label acima do mini-gráfico; OFF = label + valor lado a lado.
-  // O gráfico da aba do modal é sempre visível.
+  // Toggle Gráfico: ON = gráfico na linha do meio; OFF = valor na linha do meio.
+  // Letras verticais sempre visíveis. O gráfico da aba do modal é sempre visível.
   _applyGraphMode(key) {
     const on = this._graph(key);
     const s = this._slots[key];
     if (s) {
-      s.numRow.visible = !on;
-      s.graphLabel.visible = on;
+      s.val.visible = !on;
       s.mini.visible = on;
+      if (s.numRow)
+        s.numRow.visible = true;
+      if (s.graphLabel)
+        s.graphLabel.visible = false;
       if (on)
         s.mini.queue_repaint();
     }
@@ -499,8 +502,10 @@ export default class SysMonTrayExtension extends Extension {
         const up = Math.max(0, (cur.tx - this._prevNet[iface].tx) / dtNet);
         this._netTotals.down += Math.max(0, cur.rx - this._prevNet[iface].rx);
         this._netTotals.up += Math.max(0, cur.tx - this._prevNet[iface].tx);
-        this._hist.netDown.push(Math.min(100, (down / 10_000_000) * 100));
-        this._hist.netUp.push(Math.min(100, (up / 10_000_000) * 100));
+        // Escala log para KB/s aparecerem: 1.5K/s ~45%, 100K/s ~71%, 10M/s =100%
+        const netPct = bps => Math.max(0, Math.min(100, (Math.log10(1 + bps) / Math.log10(1 + 10_000_000)) * 100));
+        this._hist.netDown.push(netPct(down));
+        this._hist.netUp.push(netPct(up));
         this._setSlot('net', `↓${formatSpeed(down)} ↑${formatSpeed(up)}`);
         this._slots.net?.mini.queue_repaint();
         if (this._netValueLabel)
@@ -638,33 +643,44 @@ export default class SysMonTrayExtension extends Extension {
   }
 
   // ---------- Slots do tray (1 por módulo) ----------
+  // Layout vertical compacto:
+  //   C   G   R
+  //   P 100% ...  (valor ou gráfico na linha do meio)
+  //   U   U   M
   _mkAllSlots() {
     const defs = [
-      ['cpu', 'CPU', '--%', COLORS.cpu],
-      ['gpu', 'GPU', '--%', COLORS.gpu],
-      ['ram', 'MEM', '--', COLORS.ram],
-      ['net', 'NET', '↓-- ↑--', COLORS.net],
-      ['disk', 'DSK', '--%', COLORS.disk],
-      ['sensors', 'TMP', '--°', COLORS.sensors],
-      ['battery', 'BAT', '--%', COLORS.battery],
+      ['cpu', ['C', 'P', 'U'], '--%', COLORS.cpu],
+      ['gpu', ['G', 'P', 'U'], '--%', COLORS.gpu],
+      ['ram', ['R', 'A', 'M'], '--', COLORS.ram],
+      ['net', ['N', 'E', 'T'], '↓-- ↑--', COLORS.net],
+      ['disk', ['D', 'S', 'K'], '--%', COLORS.disk],
+      ['sensors', ['T', 'M', 'P'], '--°', COLORS.sensors],
+      ['battery', ['B', 'A', 'T'], '--%', COLORS.battery],
     ];
-    for (const [key, miniLabel, initText, color] of defs) {
-      const slot = new St.BoxLayout({ vertical: true, style_class: 'sysmon-slot', y_align: Clutter.ActorAlign.CENTER });
-      // Modo número: label colada no início + valor colado no fim (space-between)
-      const numRow = new St.BoxLayout({ style_class: 'sysmon-num-row', y_align: Clutter.ActorAlign.CENTER, x_expand: true });
-      const labH = new St.Label({ text: miniLabel, style_class: 'sysmon-num-label', x_align: Clutter.ActorAlign.START, y_align: Clutter.ActorAlign.CENTER });
-      const val = new St.Label({ text: initText, style_class: 'sysmon-slot-value', x_align: Clutter.ActorAlign.END, x_expand: true, y_align: Clutter.ActorAlign.CENTER });
-      numRow.add_child(labH);
-      numRow.add_child(val);
-      // Modo gráfico: label acima do sparkline
-      const labV = new St.Label({ text: miniLabel, style_class: 'sysmon-slot-label', x_align: Clutter.ActorAlign.CENTER });
-      const mini = new St.DrawingArea({ style_class: 'sysmon-mini', width: 54, height: 14, x_expand: true });
-      slot.add_child(numRow);
-      slot.add_child(labV);
-      slot.add_child(mini);
+    for (const [key, letters, initText, color] of defs) {
+      const slot = new St.BoxLayout({ vertical: false, style_class: 'sysmon-slot sysmon-slot-v', y_align: Clutter.ActorAlign.CENTER });
+      // Coluna da esquerda: sigla na vertical
+      const lettersBox = new St.BoxLayout({ vertical: true, style_class: 'sysmon-v-letters', y_align: Clutter.ActorAlign.CENTER });
+      for (const ch of letters) {
+        const l = new St.Label({ text: ch, style_class: 'sysmon-v-letter', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER });
+        lettersBox.add_child(l);
+      }
+      // Coluna da direita: valor (modo número) ou sparkline (modo gráfico),
+      // centralizado na altura para cair na linha do meio (P/A/E/...)
+      const content = new St.BoxLayout({ vertical: true, style_class: 'sysmon-v-content', y_align: Clutter.ActorAlign.CENTER, x_expand: true });
+      const val = new St.Label({ text: initText, style_class: 'sysmon-slot-value', x_align: Clutter.ActorAlign.START, y_align: Clutter.ActorAlign.CENTER });
+      const mini = new St.DrawingArea({ style_class: 'sysmon-mini', width: 54, height: 22, x_align: Clutter.ActorAlign.START, y_align: Clutter.ActorAlign.CENTER });
+      content.add_child(val);
+      content.add_child(mini);
+      slot.add_child(lettersBox);
+      slot.add_child(content);
       const histKey = { cpu: 'cpu', gpu: 'gpu', ram: 'ram', net: 'netDown', disk: 'disk', sensors: 'temp', battery: 'batt' }[key];
-      mini.connect('repaint', () => this._paintMini(mini, this._hist[histKey]?.array ?? [], color));
-      this._slots[key] = { slot, val, mini, numRow, graphLabel: labV };
+      if (key === 'net')
+        mini.connect('repaint', () => this._paintNetMini(mini));
+      else
+        mini.connect('repaint', () => this._paintMini(mini, this._hist[histKey]?.array ?? [], color));
+      // numRow/graphLabel mantidos como null p/ compat com _applyGraphMode
+      this._slots[key] = { slot, val, mini, numRow: null, graphLabel: null };
     }
   }
 
@@ -1033,6 +1049,16 @@ export default class SysMonTrayExtension extends Extension {
       box.add_child(topRow(it.name, it.val));
   }
 
+  _roundRect(cr, w, h, rad) {
+    const r = Math.min(rad, w / 2, h / 2);
+    cr.newPath();
+    cr.arc(w - r, r, r, -Math.PI / 2, 0);
+    cr.arc(w - r, h - r, r, 0, Math.PI / 2);
+    cr.arc(r, h - r, r, Math.PI / 2, Math.PI);
+    cr.arc(r, r, r, Math.PI, (Math.PI * 3) / 2);
+    cr.closePath();
+  }
+
   _paintMini(area, hist, hex) {
     const cr = area.get_context();
     const [w, h] = area.get_surface_size();
@@ -1040,23 +1066,103 @@ export default class SysMonTrayExtension extends Extension {
       return;
     const [r, g, b] = hexToRgb(hex);
     cr.setOperator(Cairo.Operator.OVER);
+    // Fundo tipo pílula da referência
+    this._roundRect(cr, w, h, 5);
+    cr.setSourceRGBA(0.5, 0.5, 0.5, 0.22);
+    cr.fill();
+    // Recorta o gráfico para dentro da pílula
+    this._roundRect(cr, w, h, 5);
+    cr.clip();
+    const pad = 1.5;
     if (!hist || hist.length < 2) {
       cr.setSourceRGBA(r, g, b, 0.35);
-      cr.rectangle(0, h - 3, w, 2);
+      cr.rectangle(pad, h - 3, w - pad * 2, 2);
       cr.fill();
+      cr.resetClip();
       cr.$dispose();
       return;
     }
+    const iw = w - pad * 2;
+    const ih = h - pad * 2;
     const n = hist.length;
-    const x = i => (i / (n - 1)) * w;
-    const y = v => h - 1 - (Math.max(0, Math.min(100, v)) / 100) * (h - 2);
+    const x = i => pad + (i / (n - 1)) * iw;
+    const y = v => pad + ih - (Math.max(0, Math.min(100, v)) / 100) * ih;
+    // Sombreado da base até a linha, na cor da linha (como na referência)
+    cr.moveTo(x(0), y(hist[0]));
+    for (let i = 1; i < n; i++)
+      cr.lineTo(x(i), y(hist[i]));
+    cr.lineTo(x(n - 1), h - pad);
+    cr.lineTo(x(0), h - pad);
+    cr.closePath();
+    cr.setSourceRGBA(r, g, b, 0.45);
+    cr.fill();
+    // Linha por cima
     cr.moveTo(x(0), y(hist[0]));
     for (let i = 1; i < n; i++)
       cr.lineTo(x(i), y(hist[i]));
     cr.setSourceRGBA(r, g, b, 0.95);
     cr.setLineWidth(1.2);
     cr.setLineJoin(Cairo.LineJoin.ROUND);
+    cr.setLineCap(Cairo.LineCap.ROUND);
     cr.stroke();
+    cr.resetClip();
+    cr.$dispose();
+  }
+
+  // Mini da rede: down com fill na base + up como 2ª linha (como na referência N/E/T)
+  _paintNetMini(area) {
+    const cr = area.get_context();
+    const [w, h] = area.get_surface_size();
+    if (w <= 0 || h <= 0)
+      return;
+    cr.setOperator(Cairo.Operator.OVER);
+    this._roundRect(cr, w, h, 5);
+    cr.setSourceRGBA(0.5, 0.5, 0.5, 0.22);
+    cr.fill();
+    this._roundRect(cr, w, h, 5);
+    cr.clip();
+    const pad = 1.5;
+    const down = this._hist.netDown?.array ?? [];
+    const up = this._hist.netUp?.array ?? [];
+    const iw = w - pad * 2;
+    const ih = h - pad * 2;
+    const x = (i, n) => pad + (i / Math.max(1, n - 1)) * iw;
+    const y = v => pad + ih - (Math.max(0, Math.min(100, v)) / 100) * ih;
+    // Down: área preenchida (azul, como na referência)
+    if (down.length >= 2) {
+      const [r, g, b] = hexToRgb(COLORS.cpu);
+      const n = down.length;
+      cr.moveTo(x(0, n), y(down[0]));
+      for (let i = 1; i < n; i++)
+        cr.lineTo(x(i, n), y(down[i]));
+      cr.lineTo(x(n - 1, n), h - pad);
+      cr.lineTo(x(0, n), h - pad);
+      cr.closePath();
+      cr.setSourceRGBA(r, g, b, 0.45);
+      cr.fill();
+      cr.moveTo(x(0, n), y(down[0]));
+      for (let i = 1; i < n; i++)
+        cr.lineTo(x(i, n), y(down[i]));
+      cr.setSourceRGBA(r, g, b, 0.95);
+      cr.setLineWidth(1.1);
+      cr.setLineJoin(Cairo.LineJoin.ROUND);
+      cr.setLineCap(Cairo.LineCap.ROUND);
+      cr.stroke();
+    }
+    // Up: só linha vermelha por cima
+    if (up.length >= 2) {
+      const [r, g, b] = hexToRgb('#ff5b5b');
+      const n = up.length;
+      cr.moveTo(x(0, n), y(up[0]));
+      for (let i = 1; i < n; i++)
+        cr.lineTo(x(i, n), y(up[i]));
+      cr.setSourceRGBA(r, g, b, 0.95);
+      cr.setLineWidth(1.1);
+      cr.setLineJoin(Cairo.LineJoin.ROUND);
+      cr.setLineCap(Cairo.LineCap.ROUND);
+      cr.stroke();
+    }
+    cr.resetClip();
     cr.$dispose();
   }
 
