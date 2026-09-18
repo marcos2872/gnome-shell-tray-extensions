@@ -1,47 +1,172 @@
-/* SysMon Tray — mix GNOME Adwaita + Apple minimalista */
+/* SysMon Tray — tipografia estilo Stats (SF Pro Text -> Inter/Cantarell) */
+.sysmon-tray-box, .sysmon-popup, .sysmon-row-header, .sysmon-row-name,
+.sysmon-row-value, .sysmon-detail-key, .sysmon-detail-val, .sysmon-top-row,
+.sysmon-tray-label, .sysmon-tab-btn, .sysmon-opt-label, .sysmon-opt-btn {
+  font-family: "SF Pro Text", "Inter", "Cantarell", system-ui, sans-serif;
+  font-feature-settings: "tnum" 1, "cv05" 1;
+}
+
 .sysmon-tray-box {
-  spacing: 6px;
+  spacing: 8px;
   padding: 0 2px;
 }
 
-.sysmon-tray-label {
+/* Slot estilo Stats/Mini: label fixa 7px + valor 12px OU mini-gráfico */
+.sysmon-slot {
+  spacing: 0;
+  padding: 0 2px;
+  min-width: 56px;
+}
+
+.sysmon-slot-label {
+  font-size: 7px;
+  font-weight: 300;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  opacity: 0.7;
+  text-align: center;
+}
+
+.sysmon-slot-value {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
 
-/* Slots de largura fixa: valores oscilam sem mover o tray */
-.sysmon-cpu-label,
-.sysmon-gpu-label {
-  min-width: 54px;
+.sysmon-mini {
+  margin-top: 1px;
 }
 
-.sysmon-ram-label {
-  min-width: 78px;
+.sysmon-tray-label {
+  font-size: 12px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* Abas (1 por módulo) */
+.sysmon-tabbar {
+  spacing: 2px;
+  padding: 2px 12px 6px 12px;
+}
+
+.sysmon-tab-btn {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 8px;
+  border-radius: 8px;
+  transition-duration: 150ms;
+}
+
+.sysmon-tab-btn:hover {
+  background-color: rgba(127, 127, 127, 0.25);
+}
+
+.sysmon-tab-btn:checked {
+  background-color: #3584e4;
+  color: #ffffff;
+}
+
+.sysmon-page {
+  spacing: 0;
+}
+
+/* Opções dentro de cada aba */
+.sysmon-opt-row {
+  spacing: 6px;
+  padding: 6px 12px;
+}
+
+.sysmon-opt-label {
+  font-size: 12px;
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+.sysmon-opt-btn {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 8px;
+  background-color: rgba(127, 127, 127, 0.15);
+  transition-duration: 150ms;
+  min-width: 44px;
+}
+
+.sysmon-opt-btn:checked {
+  background-color: #33d17a;
+  color: #ffffff;
 }
 
 .sysmon-popup {
-  min-width: 320px;
+  min-width: 280px;
   padding: 8px 4px;
+  border-radius: 6px;
 }
 
 .sysmon-row-header {
   spacing: 6px;
   padding: 6px 12px 2px 12px;
+  height: 42px;
 }
 
 .sysmon-row-name {
-  font-size: 12px;
-  font-weight: 700;
-  opacity: 0.9;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.95;
 }
 
 .sysmon-row-value {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
   opacity: 0.85;
+}
+
+/* Grade de detalhes estilo Stats: chave 12/400 op.7 + valor 12/500 tabular */
+.sysmon-detail-grid {
+  padding: 2px 12px 4px 12px;
+  spacing: 2px;
+}
+
+.sysmon-detail-row {
+  spacing: 6px;
+}
+
+.sysmon-detail-key {
+  font-size: 12px;
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.sysmon-detail-val {
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.sysmon-top-row {
+  height: 22px;
+  font-size: 12px;
+  spacing: 6px;
+  padding: 0 12px;
+}
+
+.sysmon-top-name {
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.sysmon-top-val {
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.sysmon-section {
+  spacing: 0;
 }
 
 .sysmon-graph {

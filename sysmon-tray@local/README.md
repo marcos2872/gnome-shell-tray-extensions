@@ -1,10 +1,16 @@
 # SysMon Tray
 
-Monitor minimalista de **CPU, GPU e RAM** na top bar do GNOME Shell.
-Top bar sempre mostra os 3 (`CPU 12%  GPU 5%  RAM 3.2G`); o popup traz
-um gráfico de histórico de 2 min para cada um, mais slider de taxa
-(1–5s) e botão Desligar. GPU com detecção automática:
-NVIDIA (`nvidia-smi`) → AMD (`gpu_busy_percent`) → Intel (frequência).
+Réplica GNOME do **exelban/stats**: monitor na top bar com tipografia
+SF Pro Text → Inter/Cantarell (valor 12px regular, mini-label 7px light,
+título popup 13px semibold, números tabulares).
+
+Módulos: **CPU, GPU, RAM, Rede, Disco, Sensores, Bateria (+BT)**.
+Top bar mostra por padrão só `CPU GPU RAM` em texto (`CPU 12%  GPU 5%  RAM 3.2G`).
+O popup é separado em **abas** (CPU/GPU/RAM/NET/DSK/TMP/BAT): cada aba traz
+gráfico de histórico de 2 min + grade de detalhes + top5 (CPU/RAM) +
+opções **Gráfico** (mostra/oculta label+gráfico) e **Mostrar na top bar**.
+Rodapé com slider de taxa (1–5s) e botão Desligar + seletor Esq/Dir.
+GPU: NVIDIA → AMD → Intel.
 
 ## Como rodar (modo dev)
 
@@ -35,8 +41,11 @@ Após editar qualquer arquivo, reempacote + reinstale a partir da pasta pai
 
 ```bash
 cd .. # apps/
-gnome-extensions pack ./sysmon-tray@local -o . --force
+gnome-extensions pack ./sysmon-tray@local -o . --force \
+  --extra-source=collectors.js --extra-source=history.js
 gnome-extensions install sysmon-tray@local.shell-extension.zip --force
+cp sysmon-tray@local/collectors.js sysmon-tray@local/history.js \
+  ~/.local/share/gnome-shell/extensions/sysmon-tray@local/
 cp sysmon-tray@local/schemas/gschemas.compiled ~/.local/share/gnome-shell/extensions/sysmon-tray@local/schemas/
 ./run-dev.sh
 ```
@@ -54,10 +63,12 @@ O Shell só detecta extensões novas no login:
 
 ```
 sysmon-tray@local/
-  extension.js      # coleta (CPU/RAM/GPU) + tray + popup + gráficos + slider
+  extension.js      # tray slots + popup Stats + timer + UPower
+  collectors.js     # leitores puros (CPU/RAM/Net/Disco/Sensores/top)
+  history.js        # ring buffer 120pts
   metadata.json     # uuid, shell-version, settings-schema
-  stylesheet.css    # visual Adwaita/Apple
-  prefs.js          # Preferências (taxa de atualização)
-  schemas/          # GSettings (refresh 1–5, padrão 2)
+  stylesheet.css    # tipografia Stats + tokens
+  prefs.js          # Preferências (módulos + atualização + temp/rede/disco)
+  schemas/          # GSettings (refresh, tray-side, show-* [só CPU/RAM/GPU default], graph-*, temp-unit, net-iface, disk-mount)
   run-dev.sh        # modo dev (este README)
 ```

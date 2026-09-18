@@ -16,5 +16,78 @@
         <choice value="right"/>
       </choices>
     </key>
+    <key name="show-cpu" type="b">
+      <default>true</default>
+      <summary>Exibir CPU</summary>
+    </key>
+    <key name="show-gpu" type="b">
+      <default>true</default>
+      <summary>Exibir GPU</summary>
+    </key>
+    <key name="show-ram" type="b">
+      <default>true</default>
+      <summary>Exibir RAM</summary>
+    </key>
+    <key name="show-net" type="b">
+      <default>false</default>
+      <summary>Exibir rede</summary>
+    </key>
+    <key name="show-disk" type="b">
+      <default>false</default>
+      <summary>Exibir disco</summary>
+    </key>
+    <key name="show-sensors" type="b">
+      <default>false</default>
+      <summary>Exibir sensores</summary>
+    </key>
+    <key name="show-battery" type="b">
+      <default>false</default>
+      <summary>Exibir bateria</summary>
+    </key>
+    <key name="graph-cpu" type="b">
+      <default>false</default>
+      <summary>Exibir gráfico da CPU</summary>
+    </key>
+    <key name="graph-gpu" type="b">
+      <default>false</default>
+      <summary>Exibir gráfico da GPU</summary>
+    </key>
+    <key name="graph-ram" type="b">
+      <default>false</default>
+      <summary>Exibir gráfico da RAM</summary>
+    </key>
+    <key name="graph-net" type="b">
+      <default>false</default>
+      <summary>Exibir gráfico da rede</summary>
+    </key>
+    <key name="graph-disk" type="b">
+      <default>false</default>
+      <summary>Exibir gráfico do disco</summary>
+    </key>
+    <key name="graph-sensors" type="b">
+      <default>false</default>
+      <summary>Exibir gráfico dos sensores</summary>
+    </key>
+    <key name="graph-battery" type="b">
+      <default>false</default>
+      <summary>Exibir gráfico da bateria</summary>
+    </key>
+    <key name="temp-unit" type="s">
+      <default>'c'</default>
+      <summary>Unidade de temperatura</summary>
+      <choices>
+        <choice value="c"/>
+        <choice value="f"/>
+      </choices>
+    </key>
+    <key name="net-iface" type="s">
+      <default>'auto'</default>
+      <summary>Interface de rede</summary>
+      <description>auto ou nome da interface.</description>
+    </key>
+    <key name="disk-mount" type="s">
+      <default>'/'</default>
+      <summary>Ponto de montagem do disco</summary>
+    </key>
   </schema>
 </schemalist>

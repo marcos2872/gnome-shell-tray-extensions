@@ -1,7 +1,7 @@
 {
   "uuid": "sysmon-tray@local",
   "name": "SysMon Tray",
-  "description": "Monitor minimalista de CPU, GPU e RAM na top bar com historico de 2 min.",
+  "description": "Replica do exelban/stats: CPU, GPU, RAM, rede, disco, sensores e bateria na top bar, tipografia Stats.",
   "shell-version": ["48", "49", "50"],
   "settings-schema": "org.gnome.shell.extensions.sysmon-tray",
   "url": "https://github.com/local/sysmon-tray"
