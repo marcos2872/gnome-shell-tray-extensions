@@ -81,18 +81,22 @@ export default class SysMonTrayExtension extends Extension {
     this._slots = {};
     const mkSlot = (key, miniLabel, initText, color) => {
       const slot = new St.BoxLayout({ vertical: true, style_class: 'sysmon-slot', y_align: Clutter.ActorAlign.CENTER });
-      const lab = new St.Label({ text: miniLabel, style_class: 'sysmon-slot-label', x_align: Clutter.ActorAlign.CENTER });
-      const row = new St.BoxLayout({ y_align: Clutter.ActorAlign.CENTER, x_align: Clutter.ActorAlign.CENTER, x_expand: true });
-      const val = new St.Label({ text: initText, style_class: 'sysmon-slot-value', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER });
+      // Modo número: label + valor lado a lado
+      const numRow = new St.BoxLayout({ style_class: 'sysmon-num-row', y_align: Clutter.ActorAlign.CENTER, x_align: Clutter.ActorAlign.CENTER });
+      const labH = new St.Label({ text: miniLabel, style_class: 'sysmon-num-label', y_align: Clutter.ActorAlign.CENTER });
+      const val = new St.Label({ text: initText, style_class: 'sysmon-slot-value', y_align: Clutter.ActorAlign.CENTER });
+      numRow.add_child(labH);
+      numRow.add_child(val);
+      // Modo gráfico: label acima do sparkline
+      const labV = new St.Label({ text: miniLabel, style_class: 'sysmon-slot-label', x_align: Clutter.ActorAlign.CENTER });
       const mini = new St.DrawingArea({ style_class: 'sysmon-mini', width: 54, height: 14, x_expand: true });
-      row.add_child(val);
-      row.add_child(mini);
-      slot.add_child(lab);
-      slot.add_child(row);
+      slot.add_child(numRow);
+      slot.add_child(labV);
+      slot.add_child(mini);
       trayBox.add_child(slot);
       const histKey = { cpu: 'cpu', gpu: 'gpu', ram: 'ram', net: 'netDown', disk: 'disk', sensors: 'temp', battery: 'batt' }[key];
       mini.connect('repaint', () => this._paintMini(mini, this._hist[histKey]?.array ?? [], color));
-      this._slots[key] = { slot, label: lab, val, mini };
+      this._slots[key] = { slot, val, mini, numRow, graphLabel: labV };
     };
     mkSlot('cpu', 'CPU', '--%', COLORS.cpu);
     mkSlot('gpu', 'GPU', '--%', COLORS.gpu);
@@ -162,13 +166,14 @@ export default class SysMonTrayExtension extends Extension {
     }
   }
 
-  // Toggle Gráfico: ON = tray mostra label+mini-gráfico; OFF = label+valor.
+  // Toggle Gráfico: ON = label acima do mini-gráfico; OFF = label + valor lado a lado.
   // O gráfico da aba do modal é sempre visível.
   _applyGraphMode(key) {
     const on = this._graph(key);
     const s = this._slots[key];
     if (s) {
-      s.val.visible = !on;
+      s.numRow.visible = !on;
+      s.graphLabel.visible = on;
       s.mini.visible = on;
       if (on)
         s.mini.queue_repaint();

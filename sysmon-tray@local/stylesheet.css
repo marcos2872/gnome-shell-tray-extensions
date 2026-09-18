@@ -11,11 +11,25 @@
   padding: 0 2px;
 }
 
-/* Slot estilo Stats/Mini: label fixa 7px + valor 12px OU mini-gráfico */
+/* Slot estilo Stats/Mini: sem gráfico = label + valor lado a lado;
+   com gráfico = label acima do sparkline */
 .sysmon-slot {
   spacing: 0;
   padding: 0 2px;
   min-width: 56px;
+}
+
+.sysmon-num-row {
+  spacing: 4px;
+}
+
+/* Label no modo número (lado a lado): classe própria, destaque maior que o valor */
+.sysmon-num-label {
+  font-family: "SF Pro Text", "Inter", "Cantarell", system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  text-align: center;
+  opacity: 1.0;
 }
 
 .sysmon-slot-label {
