@@ -42,9 +42,11 @@ Após editar qualquer arquivo, reempacote + reinstale a partir da pasta pai
 ```bash
 cd .. # apps/
 gnome-extensions pack ./sysmon-tray@local -o . --force \
-  --extra-source=collectors.js --extra-source=history.js
+  --extra-source=collectors.js --extra-source=history.js \
+  --extra-source=cards.js
 gnome-extensions install sysmon-tray@local.shell-extension.zip --force
 cp sysmon-tray@local/collectors.js sysmon-tray@local/history.js \
+  sysmon-tray@local/cards.js \
   ~/.local/share/gnome-shell/extensions/sysmon-tray@local/
 cp sysmon-tray@local/schemas/gschemas.compiled ~/.local/share/gnome-shell/extensions/sysmon-tray@local/schemas/
 ./run-dev.sh
@@ -63,8 +65,9 @@ O Shell só detecta extensões novas no login:
 
 ```
 sysmon-tray@local/
-  extension.js      # tray slots + popup Stats + timer + UPower
-  collectors.js     # leitores puros (CPU/RAM/Net/Disco/Sensores/top)
+  extension.js      # N botões do tray + timer + UPower
+  cards.js          # builders dos cards estilo Stats (hero/dots/bar/top)
+  collectors.js     # leitores puros (CPU/RAM/Net/Disco/Sensores/top/per-core)
   history.js        # ring buffer 120pts
   metadata.json     # uuid, shell-version, settings-schema
   stylesheet.css    # tipografia Stats + tokens

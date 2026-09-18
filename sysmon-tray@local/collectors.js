@@ -109,13 +109,17 @@ export function readCpuDetail(prev) {
     const { result, prevNext } = parseCpuStat(readFile('/proc/stat'), prev);
     if (!result)
         return { result: null, prevNext };
-    // load + freq
-    let load1 = null;
+    // load 1/5/15m
+    let load1 = null, load5 = null, load15 = null;
     const lavg = readFile('/proc/loadavg');
     if (lavg) {
-        const v = parseFloat(lavg.split(/\s+/)[0]);
-        if (!Number.isNaN(v))
-            load1 = v;
+        const f = lavg.split(/\s+/).map(Number);
+        if (!Number.isNaN(f[0]))
+            load1 = f[0];
+        if (!Number.isNaN(f[1]))
+            load5 = f[1];
+        if (!Number.isNaN(f[2]))
+            load15 = f[2];
     }
     let freqGHz = null;
     const cpuinfo = readFile('/proc/cpuinfo');
@@ -127,7 +131,34 @@ export function readCpuDetail(prev) {
                 freqGHz = mhz / 1000;
         }
     }
-    return { result: { ...result, load1, freqGHz }, prevNext };
+    return { result: { ...result, load1, load5, load15, freqGHz }, prevNext };
+}
+
+// ---------- CPU por núcleo (barrinhas estilo Stats) ----------
+export function readPerCore(prevArr) {
+    const txt = readFile('/proc/stat');
+    if (!txt)
+        return { result: null, prevNext: prevArr };
+    const lines = txt.split('\n').filter(l => /^cpu\d+\s/.test(l));
+    const prevNext = [];
+    const result = [];
+    lines.forEach((line, i) => {
+        const p = line.trim().split(/\s+/).slice(1).map(Number);
+        const safe = j => (Number.isNaN(p[j]) ? 0 : p[j]);
+        const idle = safe(3) + safe(4);
+        const total = p.reduce((a, b) => a + (Number.isNaN(b) ? 0 : b), 0);
+        prevNext.push({ idle, total });
+        const prev = prevArr?.[i];
+        if (!prev || total - prev.total <= 0) {
+            result.push(null);
+            return;
+        }
+        const pct = Math.max(0, Math.min(100, ((total - prev.total - (idle - prev.idle)) / (total - prev.total)) * 100));
+        result.push(pct);
+    });
+    if (!prevArr)
+        return { result: null, prevNext };
+    return { result, prevNext };
 }
 
 export function readCpuModel() {

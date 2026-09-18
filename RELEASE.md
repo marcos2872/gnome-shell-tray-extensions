@@ -145,7 +145,8 @@ Instalação: ...
 cd /home/marcos/Projetos/Pessoal/apps
 # SysMon Tray (tem .js extras):
 gnome-extensions pack ./sysmon-tray@local -o /tmp --force \
-  --extra-source=collectors.js --extra-source=history.js
+  --extra-source=collectors.js --extra-source=history.js \
+  --extra-source=cards.js
 # OpenCode Go Tray (logos vão na raiz do zip; extension.js tem fallback assets/ -> raiz):
 gnome-extensions pack ./opencode-go-tray@local -o /tmp --force \
   --extra-source=assets/opencode-logo-dark.svg \
@@ -158,7 +159,7 @@ gnome-extensions pack ./opencode-go-tray@local -o /tmp --force \
 ```bash
 gnome-extensions install /tmp/<app>@local.shell-extension.zip --force
 # SysMon Tray: copiar também os .js extras + schemas compilados:
-# cp sysmon-tray@local/{collectors.js,history.js} \
+# cp sysmon-tray@local/{collectors.js,history.js,cards.js} \
 #     ~/.local/share/gnome-shell/extensions/sysmon-tray@local/
 # cp <app>@local/schemas/gschemas.compiled \
 #     ~/.local/share/gnome-shell/extensions/<app>@local/schemas/

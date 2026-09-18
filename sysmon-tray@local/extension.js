@@ -14,23 +14,24 @@ import {
   readFile, formatSpeed, formatBytes, formatRamGB, formatTemp, formatDuration,
   cleanCpuModel, cleanGpuModel, readCpuDetail, readCpuModel, readRamDetail,
   parseNetDev, defaultIface, readLocalIp, readDiskUsage, parseDiskstats,
-  scanHwmon, readSensorsDetail, topProcesses, topCpuPct,
+  scanHwmon, readSensorsDetail, topProcesses, topCpuPct, readPerCore,
 } from './collectors.js';
+import {
+  hexToRgb, secTitle, detailRow, topRow, mkOptRow as mkCardOptRow,
+  paintBar, paintCores,
+} from './cards.js';
 
 const MAX_POINTS = 120; // 2 min @ 1s
 const COLORS = {
   cpu: '#3584e4', gpu: '#9a59b6', ram: '#e5a50a', net: '#2ec27e',
   disk: '#e479ff', sensors: '#ff6b6b', battery: '#33d17a',
 };
-
-function hexToRgb(hex) {
-  const h = hex.replace('#', '');
-  return [
-    parseInt(h.slice(0, 2), 16) / 255,
-    parseInt(h.slice(2, 4), 16) / 255,
-    parseInt(h.slice(4, 6), 16) / 255,
-  ];
-}
+// Ordem dos módulos no tray e nas abas
+const ORDER = ['cpu', 'gpu', 'ram', 'net', 'disk', 'sensors', 'battery'];
+const TAB_TITLES = {
+  cpu: 'CPU', gpu: 'GPU', ram: 'RAM', net: 'NET',
+  disk: 'DSK', sensors: 'TMP', battery: 'BAT',
+};
 
 // UPower states: 1 charging, 2 discharging, 3 empty, 4 full, 5 pending-charge, 6 pending-discharge
 function batteryStateLabel(state) {
@@ -52,6 +53,7 @@ export default class SysMonTrayExtension extends Extension {
       disk: new Ring(MAX_POINTS), temp: new Ring(MAX_POINTS), batt: new Ring(MAX_POINTS),
     };
     this._prevCpu = null;
+    this._prevCores = null;
     this._prevNet = null;
     this._prevNetTime = 0;
     this._prevDisk = null;
@@ -72,49 +74,35 @@ export default class SysMonTrayExtension extends Extension {
     this._upower = this._connectUpower();
     this._btDevices = [];
 
-    // --- Tray: slot = label fixa + (valor OU mini-gráfico, via toggle Gráfico) ---
-    this._indicator = new PanelMenu.Button(0.5, this.metadata.name, false);
-    const trayBox = new St.BoxLayout({
-      style_class: 'sysmon-tray-box',
-      y_align: Clutter.ActorAlign.CENTER,
-    });
+    // --- Tray misto estilo Stats: 1 botão por módulo; clicar abre o popup
+    // direto naquele módulo (as abas continuam para trocar a visualização)
+    this._buttons = {};
     this._slots = {};
-    const mkSlot = (key, miniLabel, initText, color) => {
-      const slot = new St.BoxLayout({ vertical: true, style_class: 'sysmon-slot', y_align: Clutter.ActorAlign.CENTER });
-      // Modo número: label colada no início + valor colado no fim (space-between)
-      const numRow = new St.BoxLayout({ style_class: 'sysmon-num-row', y_align: Clutter.ActorAlign.CENTER, x_expand: true });
-      const labH = new St.Label({ text: miniLabel, style_class: 'sysmon-num-label', x_align: Clutter.ActorAlign.START, y_align: Clutter.ActorAlign.CENTER });
-      const val = new St.Label({ text: initText, style_class: 'sysmon-slot-value', x_align: Clutter.ActorAlign.END, x_expand: true, y_align: Clutter.ActorAlign.CENTER });
-      numRow.add_child(labH);
-      numRow.add_child(val);
-      // Modo gráfico: label acima do sparkline
-      const labV = new St.Label({ text: miniLabel, style_class: 'sysmon-slot-label', x_align: Clutter.ActorAlign.CENTER });
-      const mini = new St.DrawingArea({ style_class: 'sysmon-mini', width: 54, height: 14, x_expand: true });
-      slot.add_child(numRow);
-      slot.add_child(labV);
-      slot.add_child(mini);
-      trayBox.add_child(slot);
-      const histKey = { cpu: 'cpu', gpu: 'gpu', ram: 'ram', net: 'netDown', disk: 'disk', sensors: 'temp', battery: 'batt' }[key];
-      mini.connect('repaint', () => this._paintMini(mini, this._hist[histKey]?.array ?? [], color));
-      this._slots[key] = { slot, val, mini, numRow, graphLabel: labV };
-    };
-    mkSlot('cpu', 'CPU', '--%', COLORS.cpu);
-    mkSlot('gpu', 'GPU', '--%', COLORS.gpu);
-    mkSlot('ram', 'MEM', '--', COLORS.ram);
-    mkSlot('net', 'NET', '↓-- ↑--', COLORS.net);
-    mkSlot('disk', 'DSK', '--%', COLORS.disk);
-    mkSlot('sensors', 'TMP', '--°', COLORS.sensors);
-    mkSlot('battery', 'BAT', '--%', COLORS.battery);
-    this._indicator.add_child(trayBox);
+    this._sections = {};
+    this._pages = {};
+    this._tabBtns = {};
+    this._openMenu = null;
+    this._refreshSliders = [];
+    this._refreshValueLabels = [];
+    this._sideLabels = [];
+    this._segLeftBtns = [];
+    this._segRightBtns = [];
+    this._mkAllSlots();
+    this._buildPages();
+    this._buildIndicators();
 
-    this._buildMenu();
-
-    Main.panel.addToStatusArea(this.uuid, this._indicator);
     this._applySide(this._traySide(), true);
     this._applyVisibility();
 
     this._settingsChangedIds = [
       this._settings.connect('changed::refresh', () => this._restartTimer()),
+      this._settings.connect('changed::refresh', () => {
+        const s = this._refreshSecs();
+        for (const sl of this._refreshSliders ?? [])
+          sl.value = (s - 1) / 4;
+        for (const l of this._refreshValueLabels ?? [])
+          l.text = `${s}s`;
+      }),
       this._settings.connect('changed::show-cpu', () => this._applyVisibility()),
       this._settings.connect('changed::show-gpu', () => this._applyVisibility()),
       this._settings.connect('changed::show-ram', () => this._applyVisibility()),
@@ -136,11 +124,21 @@ export default class SysMonTrayExtension extends Extension {
       this._settings?.disconnect(id);
     this._settingsChangedIds = [];
     this._settings = null;
-    this._indicator?.destroy();
-    this._indicator = null;
+    for (const btn of Object.values(this._buttons ?? {}))
+      btn?.destroy();
+    this._buttons = {};
     this._slots = {};
+    this._sections = {};
+    this._pages = {};
+    this._openMenu = null;
+    this._refreshSliders = [];
+    this._refreshValueLabels = [];
+    this._sideLabels = [];
+    this._segLeftBtns = [];
+    this._segRightBtns = [];
     this._hist = {};
     this._prevCpu = null;
+    this._prevCores = null;
     this._gpuValue = null;
     this._upower = null;
   }
@@ -155,8 +153,9 @@ export default class SysMonTrayExtension extends Extension {
   }
 
   _applyVisibility() {
-    for (const [key, s] of Object.entries(this._slots ?? {})) {
-      s.slot.visible = this._show(key);
+    for (const key of ORDER) {
+      if (this._buttons[key])
+        this._buttons[key].visible = this._show(key);
       this._applyGraphMode(key);
     }
     for (const [key, t] of Object.entries(this._trayToggles ?? {})) {
@@ -453,6 +452,11 @@ export default class SysMonTrayExtension extends Extension {
         this._cpuValueLabel.text = `${Math.round(cpu.pct)}%`;
       this._sections?.cpu?.graph?.queue_repaint();
       this._updateCpuDetails(cpu);
+      // Barrinhas por núcleo
+      const { result: percore, prevNext: pcNext } = readPerCore(this._prevCores);
+      this._prevCores = pcNext;
+      if (percore)
+        this._updateCpuCores(percore);
       // top CPU (precisa de 2 amostras)
       const list = topProcesses(8, 'cpu');
       const withPct = topCpuPct(list, this._prevTopMap, Math.max(1, now - this._prevTopTime || dt), 1);
@@ -473,7 +477,7 @@ export default class SysMonTrayExtension extends Extension {
       if (this._ramNameLabel)
         this._ramNameLabel.text = `RAM ${formatRamGB(ram.totalKb)}`;
       if (this._ramValueLabel)
-        this._ramValueLabel.text = `${formatRamGB(ram.usedKb)} (${Math.round(ram.pct)}%)`;
+        this._ramValueLabel.text = `${Math.round(ram.pct)}%`;
       this._sections?.ram?.graph?.queue_repaint();
       this._updateRamDetails(ram);
       this._updateTopList(this._ramTopBox, topProcesses(5, 'mem').map(p => ({ name: p.comm, val: formatRamGB(p.memKb) })));
@@ -535,7 +539,17 @@ export default class SysMonTrayExtension extends Extension {
         this._prevDisk = ds;
         this._prevDiskTime = now;
       }
-      this._updateDiskDetails(du, mount, rBps, wBps);
+      let homeDu = null;
+      if (mount === '/') {
+        try {
+          const hd = readDiskUsage('/home');
+          if (hd && hd.totalB !== du.totalB)
+            homeDu = hd;
+        } catch {
+          // sem /home separado
+        }
+      }
+      this._updateDiskDetails(du, mount, rBps, wBps, homeDu);
     }
 
     // Sensores
@@ -581,10 +595,10 @@ export default class SysMonTrayExtension extends Extension {
   }
 
   _syncSegButtons(side) {
-    if (this._leftBtn)
-      this._leftBtn.set_checked(side === 'left');
-    if (this._rightBtn)
-      this._rightBtn.set_checked(side === 'right');
+    for (const b of this._segLeftBtns ?? [])
+      b.set_checked(side === 'left');
+    for (const b of this._segRightBtns ?? [])
+      b.set_checked(side === 'right');
   }
 
   _applySide(side, force = false) {
@@ -596,29 +610,65 @@ export default class SysMonTrayExtension extends Extension {
     } catch (e) {
       logError(e, '[sysmon-tray] tray-side');
     }
-    if (this._sideLabel)
-      this._sideLabel.text = side === 'left' ? 'Esquerda' : 'Direita';
+    for (const l of this._sideLabels ?? [])
+      l.text = side === 'left' ? 'Esquerda' : 'Direita';
     this._syncSegButtons(side);
-    if (!this._indicator)
+    const btns = ORDER.map(k => this._buttons?.[k]).filter(Boolean);
+    if (!btns.length)
       return;
-    // Ancoragem do popup: na esquerda centraliza sob o ícone (0.5);
+    const target = side === 'left' ? Main.panel._leftBox : Main.panel._rightBox;
+    if (!target)
+      return;
+    // Ancoragem do popup por botão: na esquerda centraliza sob o ícone (0.5);
     // na direita mantém o padrão (0.0), que encosta na borda da tela.
     // (O 1º arg do PanelMenu.Button é o alinhamento da seta; 0.0 na
     // esquerda faz o modal nascer deslocado para a direita do ícone.)
-    const menu = this._indicator.menu;
-    if (menu && '_arrowAlignment' in menu)
-      menu._arrowAlignment = side === 'left' ? 0.5 : 0.0;
-    const target = side === 'left' ? Main.panel._leftBox : Main.panel._rightBox;
-    if (!target || this._indicator.get_parent() === target)
-      return;
-    this._indicator.get_parent()?.remove_child(this._indicator);
-    if (side === 'left')
-      target.add_child(this._indicator);
-    else
-      target.insert_child_at_index(this._indicator, 0);
+    for (const btn of btns) {
+      const menu = btn.menu;
+      if (menu && '_arrowAlignment' in menu)
+        menu._arrowAlignment = side === 'left' ? 0.5 : 0.0;
+      btn.get_parent()?.remove_child(btn);
+    }
+    btns.forEach((btn, i) => {
+      if (side === 'left')
+        target.add_child(btn);
+      else
+        target.insert_child_at_index(btn, i);
+    });
   }
 
-  // ---------- Popup em abas (1 por módulo) ----------
+  // ---------- Slots do tray (1 por módulo) ----------
+  _mkAllSlots() {
+    const defs = [
+      ['cpu', 'CPU', '--%', COLORS.cpu],
+      ['gpu', 'GPU', '--%', COLORS.gpu],
+      ['ram', 'MEM', '--', COLORS.ram],
+      ['net', 'NET', '↓-- ↑--', COLORS.net],
+      ['disk', 'DSK', '--%', COLORS.disk],
+      ['sensors', 'TMP', '--°', COLORS.sensors],
+      ['battery', 'BAT', '--%', COLORS.battery],
+    ];
+    for (const [key, miniLabel, initText, color] of defs) {
+      const slot = new St.BoxLayout({ vertical: true, style_class: 'sysmon-slot', y_align: Clutter.ActorAlign.CENTER });
+      // Modo número: label colada no início + valor colado no fim (space-between)
+      const numRow = new St.BoxLayout({ style_class: 'sysmon-num-row', y_align: Clutter.ActorAlign.CENTER, x_expand: true });
+      const labH = new St.Label({ text: miniLabel, style_class: 'sysmon-num-label', x_align: Clutter.ActorAlign.START, y_align: Clutter.ActorAlign.CENTER });
+      const val = new St.Label({ text: initText, style_class: 'sysmon-slot-value', x_align: Clutter.ActorAlign.END, x_expand: true, y_align: Clutter.ActorAlign.CENTER });
+      numRow.add_child(labH);
+      numRow.add_child(val);
+      // Modo gráfico: label acima do sparkline
+      const labV = new St.Label({ text: miniLabel, style_class: 'sysmon-slot-label', x_align: Clutter.ActorAlign.CENTER });
+      const mini = new St.DrawingArea({ style_class: 'sysmon-mini', width: 54, height: 14, x_expand: true });
+      slot.add_child(numRow);
+      slot.add_child(labV);
+      slot.add_child(mini);
+      const histKey = { cpu: 'cpu', gpu: 'gpu', ram: 'ram', net: 'netDown', disk: 'disk', sensors: 'temp', battery: 'batt' }[key];
+      mini.connect('repaint', () => this._paintMini(mini, this._hist[histKey]?.array ?? [], color));
+      this._slots[key] = { slot, val, mini, numRow, graphLabel: labV };
+    }
+  }
+
+  // ---------- Popup em abas / cards estilo Stats ----------
   _graph(key) {
     try {
       return this._settings.get_boolean(`graph-${key}`);
@@ -627,183 +677,157 @@ export default class SysMonTrayExtension extends Extension {
     }
   }
 
-  _selectTab(key) {
+  // Move a página do módulo para o menu aberto e sincroniza as abas
+  _showModule(key, menu) {
     this._activeTab = key;
-    for (const [k, btn] of Object.entries(this._tabBtns ?? {}))
-      btn.set_checked(k === key);
-    for (const [k, page] of Object.entries(this._pages ?? {}))
-      page.visible = k === key;
-    this._sections?.[key]?.graph?.queue_repaint();
+    const target = menu ?? this._openMenu;
+    const sec = this._sections[key];
+    if (sec && target?._pageHolder) {
+      const holder = target._pageHolder;
+      // Só uma página por vez: tira a anterior antes de pôr a nova.
+      // (Sem isso as páginas acumulam empilhadas e a troca não aparece.)
+      if (sec.page.get_parent() !== null && sec.page.get_parent() !== holder)
+        sec.page.get_parent().remove_child(sec.page);
+      for (const ch of [...holder.get_children()])
+        holder.remove_child(ch);
+      holder.add_child(sec.page);
+      for (const [k, b] of Object.entries(target._tabBtns ?? {}))
+        b.set_checked(k === key);
+      sec.graph?.queue_repaint();
+      sec.bar?.queue_repaint();
+      sec.cores?.queue_repaint();
+    }
   }
 
-  _buildMenu() {
-    const menu = this._indicator.menu;
-    menu.box.add_style_class_name('sysmon-popup');
+  _mkCard(key, title, color, { top = false, dualNet = false, bar = false, cores = false } = {}) {
+    // Card: título pequeno + hero gigante + USAGE HISTORY + DETAILS + extras
+    const page = new St.BoxLayout({ vertical: true, x_expand: true, style_class: 'sysmon-page' });
+    const box = new St.BoxLayout({ vertical: true, x_expand: true, style_class: 'sysmon-section' });
+    const nameLabel = new St.Label({ text: title, style_class: 'sysmon-row-name', x_expand: true, clip_to_allocation: true });
+    const valueLabel = new St.Label({ text: '--', style_class: 'sysmon-row-value', x_expand: true });
+    box.add_child(nameLabel);
+    box.add_child(valueLabel);
+    box.add_child(secTitle('USAGE HISTORY'));
+    const graph = new St.DrawingArea({ style_class: 'sysmon-graph', x_expand: true, height: 64 });
+    box.add_child(graph);
+    box.add_child(secTitle('DETAILS'));
+    const grid = new St.BoxLayout({ vertical: true, x_expand: true, style_class: 'sysmon-detail-grid' });
+    box.add_child(grid);
+    let barArea = null;
+    if (bar) {
+      barArea = new St.DrawingArea({ style_class: 'sysmon-bar', x_expand: true, height: 6 });
+      box.add_child(barArea);
+    }
+    let coresArea = null;
+    if (cores) {
+      coresArea = new St.DrawingArea({ style_class: 'sysmon-cores', x_expand: true, height: 64 });
+      box.add_child(coresArea);
+    }
+    let topBox = null;
+    if (top) {
+      box.add_child(secTitle('TOP PROCESSES'));
+      topBox = new St.BoxLayout({ vertical: true, x_expand: true });
+      box.add_child(topBox);
+    }
+    page.add_child(box);
+    // Opções da aba: gráfico do top bar e visibilidade no top bar
+    page.add_child(new PopupMenu.PopupSeparatorMenuItem());
+    const graphOpt = mkCardOptRow('Gráfico na top bar', this._graph(key), on => {
+      try {
+        this._settings.set_boolean(`graph-${key}`, on);
+      } catch (e) {
+        logError(e, '[sysmon-tray] graph opt');
+      }
+      this._applyGraphMode(key);
+      if (this._activeTab === key)
+        this._sections[key]?.graph?.queue_repaint();
+    });
+    page.add_child(graphOpt.row);
+    const trayOpt = mkCardOptRow('Mostrar na top bar', this._show(key), on => {
+      try {
+        this._settings.set_boolean(`show-${key}`, on);
+      } catch (e) {
+        logError(e, '[sysmon-tray] show opt');
+      }
+      this._applyVisibility();
+    });
+    page.add_child(trayOpt.row);
+    this._trayToggles[key] = trayOpt;
+    const sec = {
+      page, box, nameLabel, valueLabel, graph, grid,
+      bar: barArea, cores: coresArea, topBox, color, dualNet,
+      _barPct: 0, _coresArr: [],
+    };
+    if (dualNet)
+      graph.connect('repaint', () => this._paintNetGraph(graph));
+    else
+      graph.connect('repaint', () => this._paintGraph(graph, this._hist[{ cpu: 'cpu', gpu: 'gpu', ram: 'ram', disk: 'disk', sensors: 'temp', battery: 'batt', net: 'netDown' }[key]]?.array ?? [], color));
+    if (barArea)
+      barArea.connect('repaint', () => paintBar(barArea, sec._barPct, color));
+    if (coresArea)
+      coresArea.connect('repaint', () => paintCores(coresArea, sec._coresArr, color));
+    this._sections[key] = sec;
+    return sec;
+  }
 
-    // Barra de abas
-    const tabItem = new PopupMenu.PopupBaseMenuItem({ reactive: false });
-    const tabBar = new St.BoxLayout({ style_class: 'sysmon-tabbar', x_expand: true });
-    tabItem.add_child(tabBar);
-    menu.addMenuItem(tabItem);
-
-    const scroll = new St.ScrollView({ x_expand: true, y_expand: true, style_class: 'sysmon-scroll' });
-    const pagesBox = new St.BoxLayout({ vertical: true, x_expand: true, style_class: 'sysmon-sections' });
-    scroll.child = pagesBox;
-    const section = new PopupMenu.PopupBaseMenuItem({ reactive: false });
-    section.add_child(scroll);
-    menu.addMenuItem(section);
-    menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-
-    this._sections = {};
-    this._tabBtns = {};
-    this._pages = {};
+  _buildPages() {
     this._trayToggles = {};
     this._activeTab = 'cpu';
-
-    const TABS = [
-      ['cpu', 'CPU'], ['gpu', 'GPU'], ['ram', 'RAM'], ['net', 'NET'],
-      ['disk', 'DSK'], ['sensors', 'TMP'], ['battery', 'BAT'],
-    ];
-    for (const [key, title] of TABS) {
-      const btn = new St.Button({
-        label: title, style_class: 'sysmon-tab-btn',
-        toggle_mode: true, can_focus: true,
-      });
-      btn.connect('clicked', () => this._selectTab(key));
-      tabBar.add_child(btn);
-      this._tabBtns[key] = btn;
-      const page = new St.BoxLayout({ vertical: true, x_expand: true, style_class: 'sysmon-page' });
-      page.visible = false;
-      pagesBox.add_child(page);
-      this._pages[key] = page;
-    }
-
-    const mkOptRow = (page, label, initial, onChange) => {
-      const row = new St.BoxLayout({ style_class: 'sysmon-opt-row', x_expand: true });
-      const lab = new St.Label({ text: label, style_class: 'sysmon-opt-label', x_expand: true });
-      const btn = new St.Button({
-        style_class: 'sysmon-opt-btn', toggle_mode: true, can_focus: true,
-        y_align: Clutter.ActorAlign.CENTER,
-      });
-      const sync = on => {
-        btn.set_checked(on);
-        btn.label = on ? 'ON' : 'OFF';
-      };
-      sync(initial);
-      btn.connect('clicked', () => {
-        const on = btn.get_checked();
-        sync(on);
-        onChange(on);
-      });
-      row.add_child(lab);
-      row.add_child(btn);
-      page.add_child(row);
-      return { btn, sync };
-    };
-
-    const mkSection = (key, title, color, { top = false, dualNet = false } = {}) => {
-      const page = this._pages[key];
-      const box = new St.BoxLayout({ vertical: true, x_expand: true, style_class: 'sysmon-section' });
-      const header = new St.BoxLayout({ style_class: 'sysmon-row-header', x_expand: true });
-      const nameLabel = new St.Label({ text: title, style_class: 'sysmon-row-name', x_expand: true, clip_to_allocation: true });
-      const valueLabel = new St.Label({ text: '--', style_class: 'sysmon-row-value' });
-      header.add_child(nameLabel);
-      header.add_child(valueLabel);
-      const graph = new St.DrawingArea({ style_class: 'sysmon-graph', x_expand: true, height: 64 });
-      // O gráfico do modal é sempre visível; o toggle controla só o top bar.
-      const grid = new St.BoxLayout({ vertical: true, x_expand: true, style_class: 'sysmon-detail-grid' });
-      box.add_child(header);
-      box.add_child(graph);
-      box.add_child(grid);
-      let topBox = null;
-      if (top) {
-        topBox = new St.BoxLayout({ vertical: true, x_expand: true });
-        box.add_child(topBox);
-      }
-      page.add_child(box);
-      // Opções da aba: gráfico (label+gráfico) e top bar
-      page.add_child(new PopupMenu.PopupSeparatorMenuItem());
-      const graphOpt = mkOptRow(page, 'Gráfico na top bar', this._graph(key), on => {
-        try {
-          this._settings.set_boolean(`graph-${key}`, on);
-        } catch (e) {
-          logError(e, '[sysmon-tray] graph opt');
-        }
-        this._applyGraphMode(key);
-        if (this._activeTab === key)
-          this._sections[key]?.graph?.queue_repaint();
-      });
-      const trayOpt = mkOptRow(page, 'Mostrar na top bar', this._show(key), on => {
-        try {
-          this._settings.set_boolean(`show-${key}`, on);
-        } catch (e) {
-          logError(e, '[sysmon-tray] show opt');
-        }
-        this._applyVisibility();
-      });
-      this._trayToggles[key] = trayOpt;
-      const sec = { box, nameLabel, valueLabel, graph, grid, topBox, color, dualNet };
-      if (dualNet)
-        graph.connect('repaint', () => this._paintNetGraph(graph));
-      else
-        graph.connect('repaint', () => this._paintGraph(graph, this._hist[{ cpu: 'cpu', gpu: 'gpu', ram: 'ram', disk: 'disk', sensors: 'temp', battery: 'batt', net: 'netDown' }[key]]?.array ?? [], color));
-      this._sections[key] = sec;
-      return sec;
-    };
-
-    const cpu = mkSection('cpu', this._cpuModel || 'CPU', COLORS.cpu, { top: true });
+    const cpu = this._mkCard('cpu', this._cpuModel || 'CPU', COLORS.cpu, { top: true, cores: true });
     this._cpuNameLabel = cpu.nameLabel;
     this._cpuValueLabel = cpu.valueLabel;
     this._cpuTopBox = cpu.topBox;
 
-    const gpu = mkSection('gpu', this._gpuModel || 'GPU', COLORS.gpu);
+    const gpu = this._mkCard('gpu', this._gpuModel || 'GPU', COLORS.gpu);
     this._gpuNameLabel = gpu.nameLabel;
     this._gpuValueLabel = gpu.valueLabel;
 
-    const ram = mkSection('ram', 'RAM', COLORS.ram, { top: true });
+    const ram = this._mkCard('ram', 'RAM', COLORS.ram, { top: true, bar: true });
     this._ramNameLabel = ram.nameLabel;
     this._ramValueLabel = ram.valueLabel;
     this._ramTopBox = ram.topBox;
 
-    const net = mkSection('net', 'Rede', COLORS.net, { dualNet: true });
+    const net = this._mkCard('net', 'Rede', COLORS.net, { dualNet: true });
     this._netNameLabel = net.nameLabel;
     this._netValueLabel = net.valueLabel;
 
-    const disk = mkSection('disk', 'Disco', COLORS.disk);
+    const disk = this._mkCard('disk', 'Disco', COLORS.disk, { bar: true });
     this._diskNameLabel = disk.nameLabel;
     this._diskValueLabel = disk.valueLabel;
 
-    const sens = mkSection('sensors', 'Sensores', COLORS.sensors);
+    const sens = this._mkCard('sensors', 'Sensores', COLORS.sensors);
     this._sensNameLabel = sens.nameLabel;
     this._sensValueLabel = sens.valueLabel;
 
-    const batt = mkSection('battery', 'Bateria', COLORS.battery);
+    const batt = this._mkCard('battery', 'Bateria', COLORS.battery, { bar: true });
     this._battNameLabel = batt.nameLabel;
     this._battValueLabel = batt.valueLabel;
+  }
 
-    this._selectTab('cpu');
-
-    // Footer: slider 1s..5s
+  _buildFooter(menu) {
+    // Slider 1s..5s
     const footer = new PopupMenu.PopupBaseMenuItem({ reactive: false });
     const fbox = new St.BoxLayout({ style_class: 'sysmon-footer', x_expand: true });
     const rlabel = new St.Label({ text: 'Atualizar', style_class: 'sysmon-refresh-label' });
     const secs = this._refreshSecs();
     const slider = new Slider.Slider((secs - 1) / 4);
     slider.x_expand = true;
-    this._refreshValueLabel = new St.Label({ text: `${secs}s`, style_class: 'sysmon-refresh-value' });
+    const valueLabel = new St.Label({ text: `${secs}s`, style_class: 'sysmon-refresh-value' });
     slider.connect('notify::value', () => {
       const s = Math.round(1 + slider.value * 4);
-      this._refreshValueLabel.text = `${s}s`;
+      valueLabel.text = `${s}s`;
       if (s !== this._refreshSecs())
         this._settings.set_int('refresh', s);
     });
     fbox.add_child(rlabel);
     fbox.add_child(slider);
-    fbox.add_child(this._refreshValueLabel);
+    fbox.add_child(valueLabel);
     footer.add_child(fbox);
     menu.addMenuItem(footer);
+    this._refreshSliders.push(slider);
+    this._refreshValueLabels.push(valueLabel);
 
-    // Desligar + posição
+    // Desligar + posição Esq/Dir
     const offItem = new PopupMenu.PopupBaseMenuItem({ reactive: false });
     const offBox = new St.BoxLayout({ style_class: 'sysmon-offrow', x_expand: true });
     const offBtn = new St.Button({
@@ -817,25 +841,70 @@ export default class SysMonTrayExtension extends Extension {
       else if (em?.disable)
         em.disable(this.uuid);
     });
-    this._sideLabel = new St.Label({ text: 'Direita', style_class: 'sysmon-side-label', y_align: Clutter.ActorAlign.CENTER });
+    const sideLabel = new St.Label({
+      text: this._traySide() === 'left' ? 'Esquerda' : 'Direita',
+      style_class: 'sysmon-side-label', y_align: Clutter.ActorAlign.CENTER,
+    });
     const segBox = new St.BoxLayout({ style_class: 'sysmon-segbox', y_align: Clutter.ActorAlign.CENTER });
-    this._leftBtn = new St.Button({ label: '◀', style_class: 'sysmon-seg-btn', toggle_mode: true, can_focus: true, y_align: Clutter.ActorAlign.CENTER });
-    this._rightBtn = new St.Button({ label: '▶', style_class: 'sysmon-seg-btn', toggle_mode: true, can_focus: true, y_align: Clutter.ActorAlign.CENTER });
-    this._leftBtn.connect('clicked', () => this._applySide('left'));
-    this._rightBtn.connect('clicked', () => this._applySide('right'));
-    this._syncSegButtons(this._traySide());
-    segBox.add_child(this._leftBtn);
-    segBox.add_child(this._rightBtn);
+    const leftBtn = new St.Button({ label: '◀', style_class: 'sysmon-seg-btn', toggle_mode: true, can_focus: true, y_align: Clutter.ActorAlign.CENTER });
+    const rightBtn = new St.Button({ label: '▶', style_class: 'sysmon-seg-btn', toggle_mode: true, can_focus: true, y_align: Clutter.ActorAlign.CENTER });
+    leftBtn.connect('clicked', () => this._applySide('left'));
+    rightBtn.connect('clicked', () => this._applySide('right'));
+    segBox.add_child(leftBtn);
+    segBox.add_child(rightBtn);
     offBox.add_child(offBtn);
-    offBox.add_child(this._sideLabel);
+    offBox.add_child(sideLabel);
     offBox.add_child(segBox);
     offItem.add_child(offBox);
     menu.addMenuItem(offItem);
+    this._sideLabels.push(sideLabel);
+    this._segLeftBtns.push(leftBtn);
+    this._segRightBtns.push(rightBtn);
+    this._syncSegButtons(this._traySide());
+  }
 
-    menu.connect('open-state-changed', (m, open) => {
-      if (open)
-        this._sections?.[this._activeTab]?.graph?.queue_repaint();
-    });
+  _buildIndicators() {
+    for (const key of ORDER) {
+      const btn = new PanelMenu.Button(0.5, `${this.metadata.name} ${key}`, false);
+      btn.add_child(this._slots[key].slot);
+      const menu = btn.menu;
+      menu.box.add_style_class_name('sysmon-popup');
+      // Barra de abas (troca a visualização dentro do popup aberto)
+      const tabItem = new PopupMenu.PopupBaseMenuItem({ reactive: false });
+      const tabBar = new St.BoxLayout({ style_class: 'sysmon-tabbar', x_expand: true });
+      tabItem.add_child(tabBar);
+      menu.addMenuItem(tabItem);
+      const tabBtns = {};
+      for (const k of ORDER) {
+        const b = new St.Button({
+          label: TAB_TITLES[k], style_class: 'sysmon-tab-btn',
+          toggle_mode: true, can_focus: true,
+        });
+        b.connect('clicked', () => this._showModule(k, menu));
+        tabBar.add_child(b);
+        tabBtns[k] = b;
+      }
+      // Holder recebe a página do módulo selecionado
+      const holderItem = new PopupMenu.PopupBaseMenuItem({ reactive: false });
+      const holder = new St.BoxLayout({ vertical: true, x_expand: true });
+      holderItem.add_child(holder);
+      menu.addMenuItem(holderItem);
+      menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+      this._buildFooter(menu);
+      menu._pageHolder = holder;
+      menu._tabBtns = tabBtns;
+      menu._moduleKey = key;
+      menu.connect('open-state-changed', (m, open) => {
+        if (open) {
+          this._openMenu = menu;
+          this._showModule(key, menu);
+        } else if (this._openMenu === menu) {
+          this._openMenu = null;
+        }
+      });
+      Main.panel.addToStatusArea(`${this.uuid}-${key}`, btn);
+      this._buttons[key] = btn;
+    }
   }
 
   _setDetails(secKey, rows) {
@@ -843,77 +912,96 @@ export default class SysMonTrayExtension extends Extension {
     if (!sec)
       return;
     sec.grid.destroy_all_children();
-    for (const [k, v] of rows) {
-      const row = new St.BoxLayout({ style_class: 'sysmon-detail-row', x_expand: true });
-      const kl = new St.Label({ text: k, style_class: 'sysmon-detail-key', x_expand: true });
-      const vl = new St.Label({ text: v, style_class: 'sysmon-detail-val' });
-      row.add_child(kl);
-      row.add_child(vl);
-      sec.grid.add_child(row);
-    }
+    for (const [color, k, v] of rows)
+      sec.grid.add_child(detailRow(color, k, v));
+  }
+
+  _setBar(secKey, pct) {
+    const sec = this._sections?.[secKey];
+    if (!sec?.bar)
+      return;
+    sec._barPct = pct ?? 0;
+    sec.bar.queue_repaint();
   }
 
   _updateCpuDetails(cpu) {
     const freq = cpu.freqGHz ? `${cpu.freqGHz.toFixed(1)} GHz` : '--';
-    const load = cpu.load1 != null ? `${cpu.load1.toFixed(2)}` : '--';
+    const load = v => (v != null ? v.toFixed(2) : '--');
     this._setDetails('cpu', [
-      ['Usuário', `${Math.round(cpu.userPct)}%`],
-      ['Sistema', `${Math.round(cpu.sysPct)}%`],
-      ['Ocioso', `${Math.round(cpu.idlePct)}%`],
-      ['Load 1m', load],
-      ['Frequência', freq],
+      [COLORS.cpu, 'Usuário', `${Math.round(cpu.userPct)}%`],
+      ['#e5a50a', 'Sistema', `${Math.round(cpu.sysPct)}%`],
+      ['#33d17a', 'Ocioso', `${Math.round(cpu.idlePct)}%`],
+      ['#9a59b6', 'Load 1m', load(cpu.load1)],
+      ['#9a59b6', 'Load 5m', load(cpu.load5)],
+      ['#9a59b6', 'Load 15m', load(cpu.load15)],
+      ['#ff7800', 'Frequência', freq],
     ]);
+  }
+
+  _updateCpuCores(percore) {
+    const sec = this._sections?.cpu;
+    if (!sec?.cores || !percore)
+      return;
+    sec._coresArr = percore.slice(0, 16);
+    sec.cores.set_height(Math.max(16, sec._coresArr.length * 16));
+    sec.cores.queue_repaint();
   }
 
   _updateRamDetails(ram) {
     this._setDetails('ram', [
-      ['Usada', formatRamGB(ram.usedKb)],
-      ['Total', formatRamGB(ram.totalKb)],
-      ['Swap', `${formatRamGB(ram.swapUsedKb)}/${formatRamGB(ram.swapTotalKb)}`],
-      ['Pressão', ram.pressure],
+      [COLORS.ram, 'Usada', formatRamGB(ram.usedKb)],
+      ['#737373', 'Total', formatRamGB(ram.totalKb)],
+      ['#9a59b6', 'Swap', `${formatRamGB(ram.swapUsedKb)}/${formatRamGB(ram.swapTotalKb)}`],
+      ['#33d17a', 'Pressão', ram.pressure],
     ]);
+    this._setBar('ram', ram.pct);
   }
 
   _updateGpuDetails() {
-    const rows = [['Uso', this._gpuValue != null ? `${Math.round(this._gpuValue)}%` : '--']];
+    const rows = [[COLORS.gpu, 'Uso', this._gpuValue != null ? `${Math.round(this._gpuValue)}%` : '--']];
     if (this._gpuMem)
-      rows.push(['Memória', `${(this._gpuMem.usedMiB / 1024).toFixed(1)}/${(this._gpuMem.totalMiB / 1024).toFixed(1)} GB`]);
+      rows.push([COLORS.cpu, 'Memória', `${(this._gpuMem.usedMiB / 1024).toFixed(1)}/${(this._gpuMem.totalMiB / 1024).toFixed(1)} GB`]);
     if (this._gpuTemp != null)
-      rows.push(['Temp', formatTemp(this._gpuTemp, this._tempUnit())]);
+      rows.push(['#ff6b6b', 'Temp', formatTemp(this._gpuTemp, this._tempUnit())]);
     else {
       const s = readSensorsDetail(this._hwmon);
       if (s.gpuC != null)
-        rows.push(['Temp', formatTemp(s.gpuC, this._tempUnit())]);
+        rows.push(['#ff6b6b', 'Temp', formatTemp(s.gpuC, this._tempUnit())]);
     }
     this._setDetails('gpu', rows);
   }
 
   _updateNetDetails(iface, down, up) {
     this._setDetails('net', [
-      ['Download', `${formatSpeed(down)}/s`],
-      ['Upload', `${formatSpeed(up)}/s`],
-      ['Total ↓', formatBytes(this._netTotals.down)],
-      ['Total ↑', formatBytes(this._netTotals.up)],
-      ['IP local', this._localIp ?? '--'],
+      [COLORS.net, 'Download', `${formatSpeed(down)}/s`],
+      ['#ff7800', 'Upload', `${formatSpeed(up)}/s`],
+      [COLORS.cpu, 'Total ↓', formatBytes(this._netTotals.down)],
+      [COLORS.gpu, 'Total ↑', formatBytes(this._netTotals.up)],
+      ['#737373', 'Interface', iface],
+      ['#737373', 'IP local', this._localIp ?? '--'],
     ]);
   }
 
-  _updateDiskDetails(du, mount, rBps, wBps) {
-    this._setDetails('disk', [
-      [mount, `${formatBytes(du.usedB)}/${formatBytes(du.totalB)}`],
-      ['Leitura', rBps != null ? `${formatSpeed(rBps)}/s` : '--'],
-      ['Escrita', wBps != null ? `${formatSpeed(wBps)}/s` : '--'],
-    ]);
+  _updateDiskDetails(du, mount, rBps, wBps, homeDu = null) {
+    const rows = [
+      [COLORS.disk, mount, `${formatBytes(du.usedB)}/${formatBytes(du.totalB)}`],
+      [COLORS.net, 'Leitura', rBps != null ? `${formatSpeed(rBps)}/s` : '--'],
+      ['#ff7800', 'Escrita', wBps != null ? `${formatSpeed(wBps)}/s` : '--'],
+    ];
+    if (homeDu && homeDu.totalB !== du.totalB)
+      rows.push([COLORS.gpu, '/home', `${formatBytes(homeDu.usedB)}/${formatBytes(homeDu.totalB)}`]);
+    this._setDetails('disk', rows);
+    this._setBar('disk', du.pct);
   }
 
   _updateSensorsDetails(sens, unit) {
     this._setDetails('sensors', [
-      ['CPU', formatTemp(sens.cpuC, unit)],
-      ['GPU', formatTemp(sens.gpuC, unit)],
-      ['SSD', formatTemp(sens.ssdC, unit)],
-      ['Ventoinha', sens.fanRpm != null ? `${Math.round(sens.fanRpm)} RPM` : '--'],
-      ['Tensão', sens.voltV != null ? `${sens.voltV.toFixed(2)}V` : '--'],
-      ['Potência', sens.powerW != null ? `${sens.powerW.toFixed(1)}W` : '--'],
+      ['#ff6b6b', 'CPU', formatTemp(sens.cpuC, unit)],
+      [COLORS.gpu, 'GPU', formatTemp(sens.gpuC, unit)],
+      [COLORS.cpu, 'SSD', formatTemp(sens.ssdC, unit)],
+      [COLORS.net, 'Ventoinha', sens.fanRpm != null ? `${Math.round(sens.fanRpm)} RPM` : '--'],
+      ['#e5a50a', 'Tensão', sens.voltV != null ? `${sens.voltV.toFixed(2)}V` : '--'],
+      ['#ff7800', 'Potência', sens.powerW != null ? `${sens.powerW.toFixed(1)}W` : '--'],
     ]);
   }
 
@@ -922,32 +1010,27 @@ export default class SysMonTrayExtension extends Extension {
     if (batt)
       this._lastBatt = batt;
     if (!b) {
-      this._setDetails('battery', [['Bateria', 'N/A (desktop?)']]);
+      this._setDetails('battery', [['#737373', 'Bateria', 'N/A (desktop?)']]);
       return;
     }
     const rows = [
-      ['Nível', `${Math.round(b.pct)}%`],
-      ['Estado', batteryStateLabel(b.state)],
-      ['Tempo', b.timeSec > 60 ? formatDuration(b.timeSec) : '--'],
-      ['Saúde', b.capacity != null ? `${Math.round(b.capacity)}%` : '--'],
+      [COLORS.battery, 'Nível', `${Math.round(b.pct)}%`],
+      [COLORS.cpu, 'Estado', batteryStateLabel(b.state)],
+      ['#e5a50a', 'Tempo', b.timeSec > 60 ? formatDuration(b.timeSec) : '--'],
+      [COLORS.gpu, 'Saúde', b.capacity != null ? `${Math.round(b.capacity)}%` : '--'],
     ];
     for (const d of this._btDevices ?? [])
-      rows.push([`◈ ${d.name}`, `${d.pct}%`]);
+      rows.push([COLORS.cpu, `◈ ${d.name}`, `${d.pct}%`]);
     this._setDetails('battery', rows);
+    this._setBar('battery', b.pct);
   }
 
   _updateTopList(box, items) {
     if (!box)
       return;
     box.destroy_all_children();
-    for (const it of items) {
-      const row = new St.BoxLayout({ style_class: 'sysmon-top-row', x_expand: true });
-      const n = new St.Label({ text: it.name, style_class: 'sysmon-top-name', x_expand: true, clip_to_allocation: true });
-      const v = new St.Label({ text: it.val, style_class: 'sysmon-top-val' });
-      row.add_child(n);
-      row.add_child(v);
-      box.add_child(row);
-    }
+    for (const it of items)
+      box.add_child(topRow(it.name, it.val));
   }
 
   _paintMini(area, hist, hex) {

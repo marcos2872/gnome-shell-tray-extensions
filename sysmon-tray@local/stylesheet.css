@@ -2,7 +2,7 @@
 .sysmon-tray-box, .sysmon-popup, .sysmon-row-header, .sysmon-row-name,
 .sysmon-row-value, .sysmon-detail-key, .sysmon-detail-val, .sysmon-top-row,
 .sysmon-tray-label, .sysmon-tab-btn, .sysmon-opt-label, .sysmon-opt-btn {
-  font-family: "SF Pro Text", "Inter", "Cantarell", system-ui, sans-serif;
+  font-family: Cantarell;
   font-feature-settings: "tnum" 1, "cv05" 1;
 }
 
@@ -16,7 +16,7 @@
 .sysmon-slot {
   spacing: 0;
   padding: 0 2px;
-  min-width: 56px;
+  min-width: 68px;
 }
 
 .sysmon-num-row {
@@ -25,7 +25,7 @@
 
 /* Label no modo número (lado a lado): classe própria, destaque maior que o valor */
 .sysmon-num-label {
-  font-family: "SF Pro Text", "Inter", "Cantarell", system-ui, sans-serif;
+  font-family: Cantarell;
   font-size: 12px;
   font-weight: 400;
   text-align: center;
@@ -66,9 +66,9 @@
 }
 
 .sysmon-tab-btn {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
-  padding: 6px 8px;
+  padding: 5px 6px;
   border-radius: 8px;
   transition-duration: 150ms;
 }
@@ -114,38 +114,56 @@
 }
 
 .sysmon-popup {
-  min-width: 280px;
+  min-width: 300px;
   padding: 8px 4px;
   border-radius: 6px;
 }
 
+/* Card estilo Stats: título pequeno + hero gigante */
 .sysmon-row-header {
-  spacing: 6px;
-  padding: 6px 12px 2px 12px;
-  height: 42px;
+  spacing: 0;
+  padding: 6px 12px 0 12px;
 }
 
 .sysmon-row-name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  opacity: 0.95;
+  opacity: 0.8;
 }
 
 .sysmon-row-value {
-  font-size: 12px;
-  font-weight: 400;
+  font-size: 30px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  opacity: 0.85;
+  opacity: 0.95;
+  padding: 0 0 2px 0;
 }
 
-/* Grade de detalhes estilo Stats: chave 12/400 op.7 + valor 12/500 tabular */
+/* Títulos de seção: USAGE HISTORY / DETAILS / TOP PROCESSES */
+.sysmon-sec-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  opacity: 0.55;
+  padding: 8px 12px 2px 12px;
+}
+
+/* Grade de detalhes estilo Stats: chave 12/400 op.7 + valor 12/500 tabular
+   (insets nas linhas por causa do dot) */
 .sysmon-detail-grid {
-  padding: 2px 12px 4px 12px;
+  padding: 0 0 4px 0;
   spacing: 2px;
 }
 
 .sysmon-detail-row {
   spacing: 6px;
+}
+
+.sysmon-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  margin-left: 12px;
 }
 
 .sysmon-detail-key {
@@ -159,6 +177,16 @@
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   text-align: right;
+  padding-right: 12px;
+}
+
+/* Barra fina de pressão/uso + barrinhas por núcleo */
+.sysmon-bar {
+  margin: 2px 12px 6px 12px;
+}
+
+.sysmon-cores {
+  margin: 0 12px 4px 12px;
 }
 
 .sysmon-top-row {
