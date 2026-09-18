@@ -81,10 +81,10 @@ export default class SysMonTrayExtension extends Extension {
     this._slots = {};
     const mkSlot = (key, miniLabel, initText, color) => {
       const slot = new St.BoxLayout({ vertical: true, style_class: 'sysmon-slot', y_align: Clutter.ActorAlign.CENTER });
-      // Modo número: label + valor lado a lado
-      const numRow = new St.BoxLayout({ style_class: 'sysmon-num-row', y_align: Clutter.ActorAlign.CENTER, x_align: Clutter.ActorAlign.CENTER });
-      const labH = new St.Label({ text: miniLabel, style_class: 'sysmon-num-label', y_align: Clutter.ActorAlign.CENTER });
-      const val = new St.Label({ text: initText, style_class: 'sysmon-slot-value', y_align: Clutter.ActorAlign.CENTER });
+      // Modo número: label colada no início + valor colado no fim (space-between)
+      const numRow = new St.BoxLayout({ style_class: 'sysmon-num-row', y_align: Clutter.ActorAlign.CENTER, x_expand: true });
+      const labH = new St.Label({ text: miniLabel, style_class: 'sysmon-num-label', x_align: Clutter.ActorAlign.START, y_align: Clutter.ActorAlign.CENTER });
+      const val = new St.Label({ text: initText, style_class: 'sysmon-slot-value', x_align: Clutter.ActorAlign.END, x_expand: true, y_align: Clutter.ActorAlign.CENTER });
       numRow.add_child(labH);
       numRow.add_child(val);
       // Modo gráfico: label acima do sparkline
