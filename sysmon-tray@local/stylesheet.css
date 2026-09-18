@@ -1,0 +1,122 @@
+/* SysMon Tray — mix GNOME Adwaita + Apple minimalista */
+.sysmon-tray-box {
+  spacing: 6px;
+  padding: 0 2px;
+}
+
+.sysmon-tray-label {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* Slots de largura fixa: valores oscilam sem mover o tray */
+.sysmon-cpu-label,
+.sysmon-gpu-label {
+  min-width: 54px;
+}
+
+.sysmon-ram-label {
+  min-width: 78px;
+}
+
+.sysmon-popup {
+  min-width: 320px;
+  padding: 8px 4px;
+}
+
+.sysmon-row-header {
+  spacing: 6px;
+  padding: 6px 12px 2px 12px;
+}
+
+.sysmon-row-name {
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+.sysmon-row-value {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+.sysmon-graph {
+  margin: 0 12px 6px 12px;
+  border-radius: 10px;
+  background-color: rgba(127, 127, 127, 0.12);
+}
+
+.sysmon-footer {
+  padding: 4px 12px;
+  spacing: 8px;
+}
+
+.sysmon-refresh-label {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.sysmon-refresh-value {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 28px;
+}
+
+.sysmon-off-button {
+  margin: 0;
+  border-radius: 10px;
+  padding: 8px;
+  font-weight: 700;
+  transition-duration: 150ms;
+}
+
+.sysmon-off-button:hover {
+  background-color: #e12731;
+}
+
+.sysmon-off-button:active {
+  background-color: #c3101f;
+}
+
+.sysmon-offrow {
+  spacing: 8px;
+  padding: 4px 12px 6px 12px;
+}
+
+.sysmon-side-label {
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+/* Controle segmentado Esq/Dir (estilo Apple) */
+.sysmon-segbox {
+  spacing: 0;
+  background-color: rgba(127, 127, 127, 0.15);
+  border-radius: 10px;
+  padding: 2px;
+}
+
+.sysmon-seg-btn {
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-weight: 700;
+  transition-duration: 150ms;
+}
+
+.sysmon-seg-btn:hover {
+  background-color: rgba(127, 127, 127, 0.25);
+}
+
+.sysmon-seg-btn:checked {
+  background-color: #3584e4;
+  color: #ffffff;
+}
+
+.sysmon-seg-btn:checked:hover {
+  background-color: #4a90e8;
+}

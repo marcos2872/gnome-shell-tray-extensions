@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.sysmon-tray" path="/org/gnome/shell/extensions/sysmon-tray/">
+    <key name="refresh" type="i">
+      <default>2</default>
+      <summary>Taxa de atualizacao em segundos</summary>
+      <description>Intervalo de coleta entre 1 e 5 segundos.</description>
+      <range min="1" max="5"/>
+    </key>
+    <key name="tray-side" type="s">
+      <default>'right'</default>
+      <summary>Lado do tray na top bar</summary>
+      <description>left ou right.</description>
+      <choices>
+        <choice value="left"/>
+        <choice value="right"/>
+      </choices>
+    </key>
+  </schema>
+</schemalist>
