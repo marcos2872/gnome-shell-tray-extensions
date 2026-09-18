@@ -82,9 +82,9 @@ export default class SysMonTrayExtension extends Extension {
     const mkSlot = (key, miniLabel, initText, color) => {
       const slot = new St.BoxLayout({ vertical: true, style_class: 'sysmon-slot', y_align: Clutter.ActorAlign.CENTER });
       const lab = new St.Label({ text: miniLabel, style_class: 'sysmon-slot-label', x_align: Clutter.ActorAlign.CENTER });
-      const row = new St.BoxLayout({ y_align: Clutter.ActorAlign.CENTER, x_align: Clutter.ActorAlign.CENTER });
+      const row = new St.BoxLayout({ y_align: Clutter.ActorAlign.CENTER, x_align: Clutter.ActorAlign.CENTER, x_expand: true });
       const val = new St.Label({ text: initText, style_class: 'sysmon-slot-value', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER });
-      const mini = new St.DrawingArea({ style_class: 'sysmon-mini', width: 30, height: 14 });
+      const mini = new St.DrawingArea({ style_class: 'sysmon-mini', width: 54, height: 14, x_expand: true });
       row.add_child(val);
       row.add_child(mini);
       slot.add_child(lab);
