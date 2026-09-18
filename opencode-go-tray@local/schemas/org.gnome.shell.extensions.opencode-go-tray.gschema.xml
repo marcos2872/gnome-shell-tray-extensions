@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.opencode-go-tray" path="/org/gnome/shell/extensions/opencode-go-tray/">
+    <key name="refresh" type="i">
+      <default>300</default>
+      <summary>Intervalo de consulta em segundos</summary>
+      <description>Intervalo entre consultas a API do OpenCode Go (60 a 900 segundos).</description>
+      <range min="60" max="900"/>
+    </key>
+    <key name="tray-side" type="s">
+      <default>'right'</default>
+      <summary>Lado do icone na top bar</summary>
+      <description>left ou right.</description>
+      <choices>
+        <choice value="left"/>
+        <choice value="right"/>
+      </choices>
+    </key>
+  </schema>
+</schemalist>

@@ -1,0 +1,8 @@
+{
+  "uuid": "opencode-go-tray@local",
+  "name": "OpenCode Go Tray",
+  "description": "Monitor do plano OpenCode Go na top bar: 5-hour, Weekly e Monthly via API oficial. Icone unico, modal com cotas ao clicar.",
+  "shell-version": ["48", "49", "50"],
+  "settings-schema": "org.gnome.shell.extensions.opencode-go-tray",
+  "url": "https://github.com/local/opencode-go-tray"
+}
