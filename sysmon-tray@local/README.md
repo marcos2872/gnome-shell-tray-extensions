@@ -36,11 +36,10 @@ tail -f /tmp/sysmon-tray-dev.log | grep -i sysmon
 
 ## Ciclo de desenvolvimento
 
-Após editar qualquer arquivo, reempacote + reinstale a partir da pasta pai
-(`apps/`) e reabra o dev (mudança em `extension.js` só pega em nova sessão):
+Após editar qualquer arquivo, reempacote + reinstale a partir da raiz do
+projeto e reabra o dev (mudança em `extension.js` só pega em nova sessão):
 
 ```bash
-cd .. # apps/
 gnome-extensions pack ./sysmon-tray@local -o . --force \
   --extra-source=collectors.js --extra-source=history.js \
   --extra-source=cards.js
@@ -48,6 +47,7 @@ gnome-extensions install sysmon-tray@local.shell-extension.zip --force
 cp sysmon-tray@local/collectors.js sysmon-tray@local/history.js \
   sysmon-tray@local/cards.js \
   ~/.local/share/gnome-shell/extensions/sysmon-tray@local/
+glib-compile-schemas sysmon-tray@local/schemas/
 cp sysmon-tray@local/schemas/gschemas.compiled ~/.local/share/gnome-shell/extensions/sysmon-tray@local/schemas/
 ./run-dev.sh
 ```
