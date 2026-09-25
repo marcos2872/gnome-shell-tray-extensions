@@ -13,7 +13,7 @@ Mensal   [█░░░░░░░]  8% usado   reseta em 12d
 ```
 
 Fonte: `GET https://opencode.ai/zen/go/v1/usage` com `Authorization: Bearer <key>`.
-Auth (nesta ordem): `OPENCODE_API_KEY` (env) → `~/.local/share/opencode/auth.json`
+Auth (nesta ordem): `OPENCODE_API_KEY` (env) → `opencode.db` (`credential opencode-go`, v2) → `~/.local/share/opencode/auth.json`
 (`opencode-go`, fallback `opencode`). Botão dashboard abre `https://opencode.ai/go`.
 Sem billing/scrape e sem tela de preferências no v1.
 

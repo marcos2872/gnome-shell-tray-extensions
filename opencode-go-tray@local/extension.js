@@ -120,11 +120,48 @@ export default class OpenCodeGoTrayExtension extends Extension {
     this._fetchBusy = false;
   }
 
-  // ---------- Auth: env + auth.json (nunca loga a key) ----------
+  // ---------- Auth: env + opencode.db (v2) + auth.json legado (nunca loga a key) ----------
+  _dbCandidates() {
+    const out = [];
+    const override = GLib.getenv('OPENCODE_DB');
+    if (override && override.trim())
+      out.push(override.trim());
+    const xdg = GLib.getenv('XDG_DATA_HOME');
+    if (xdg && xdg.trim())
+      out.push(`${xdg.trim()}/opencode/opencode.db`);
+    out.push(`${GLib.get_home_dir()}/.local/share/opencode/opencode.db`);
+    return out;
+  }
+
+  _readKeyFromDb() {
+    for (const dbPath of this._dbCandidates()) {
+      try {
+        if (!GLib.file_test(dbPath, GLib.FileTest.EXISTS))
+          continue;
+        const proc = Gio.Subprocess.new(
+          ['sqlite3', dbPath, "SELECT value FROM credential WHERE integration_id='opencode-go' ORDER BY active DESC LIMIT 1;"],
+          Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE
+        );
+        const [ok, stdout] = proc.communicate_utf8(null, null);
+        if (!ok || !stdout || !stdout.trim())
+          continue;
+        const row = JSON.parse(stdout.trim());
+        if (typeof row?.key === 'string' && row.key.trim())
+          return row.key.trim();
+      } catch (e) {
+        logError(e, '[gobar] read opencode.db');
+      }
+    }
+    return null;
+  }
+
   _resolveApiKey() {
     const env = GLib.getenv('OPENCODE_API_KEY');
     if (env && env.trim())
       return { key: env.trim(), source: 'env' };
+    const dbKey = this._readKeyFromDb();
+    if (dbKey)
+      return { key: dbKey, source: 'opencode.db' };
     try {
       const path = `${GLib.get_home_dir()}/.local/share/opencode/auth.json`;
       const [ok, bytes] = GLib.file_get_contents(path);
@@ -231,7 +268,7 @@ export default class OpenCodeGoTrayExtension extends Extension {
     const http = idx >= 0 ? parseInt(out.slice(idx + marker.length).trim(), 10) : 0;
 
     if (http === 401) {
-      this._showError('API key inválida (401). Refaça o login: opencode auth login -p opencode-go.', 'não autorizado', source);
+      this._showError('API key inválida (401). Regenere a key em opencode.ai/auth e refaça: opencode auth login -p opencode-go.', 'não autorizado', source);
       return;
     }
     if (http === 403) {
@@ -342,6 +379,7 @@ export default class OpenCodeGoTrayExtension extends Extension {
     if (!this._indicator)
       return;
     const src = source === 'env' ? 'env'
+      : source === 'opencode.db' ? 'opencode.db'
       : source === 'auth.json' ? 'auth.json'
       : source === 'auth.json-legacy' ? 'auth.json'
       : 'sem key';
